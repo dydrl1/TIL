@@ -1,4 +1,4 @@
-cat > 2025-10-29-nginx-502-bad-gateway.md <<'EOF'
+
 # 🐳 Nginx 502 Bad Gateway 원인 분석 및 해결
 
 **작성일:** 2025-10-29  
