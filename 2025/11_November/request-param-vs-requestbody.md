@@ -7,21 +7,21 @@ Spring Boot에서 클라이언트로부터 데이터를 받을 때는 주로
 
 ---
 
-### 🧩 1. @RequestParam — 쿼리스트링이나 form-data용
+### 💻 1. @RequestParam — 쿼리스트링이나 form-data용
 
-#### ✅ 사용 예시
+#### ✔️ 사용 예시
 ```java
 @GetMapping("/user")
 public String getUser(@RequestParam String name, @RequestParam int age) {
     return name + "은(는) " + age + "살입니다.";
 }
 
-✅ 요청 예시
+✔️ 요청 예시
 pgsql
 코드 복사
 GET /user?name=만두&age=25
 
-✅ 특징
+✔️ 특징
 주로 GET 요청이나 **폼(form)**에서 데이터를 받을 때 사용
 
 key=value 형태로 전달
@@ -30,9 +30,9 @@ key=value 형태로 전달
 
 자동 형변환 지원 (String → int 등)
 
-🧩 2. @RequestBody — JSON 형태의 데이터용
+💻 2. @RequestBody — JSON 형태의 데이터용
 
-✅ 사용 예시
+✔️ 사용 예시
 java
 코드 복사
 @PostMapping("/user")
@@ -40,7 +40,7 @@ public String createUser(@RequestBody UserDTO user) {
     return user.getName() + " 등록 완료!";
 }
 
-✅ 요청 예시 (JSON)
+✔️ 요청 예시 (JSON)
 json
 코드 복사
 POST /user
@@ -49,7 +49,7 @@ POST /user
   "age": 25
 }
 
-✅ 특징
+✔️ 특징
 주로 POST, PUT, PATCH 요청에서 사용
 
 Body에 담긴 JSON 데이터를 객체로 매핑
