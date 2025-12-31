@@ -1,166 +1,50 @@
-# [JPA] 플레이리스트 - 트랙 엔티티 설계 & 다대다 관계 풀기
+JPA에서 중간 테이블(연결 엔티티)을 사용하는 이유
+Playlist ↔ Track 설계 정리
+1. 문제 상황
 
----
+플레이리스트 서비스에서 다음과 같은 요구사항이 있었다.
 
-## 0. 작업 시작 & 브랜치 상태 확인
+하나의 플레이리스트에는 여러 곡이 들어갈 수 있다.
 
-플레이리스트 기능 구현을 진행하면서  
-JPA 엔티티 설계부터 정리하고 TIL로 남기기로 했다.
+하나의 곡은 여러 플레이리스트에 포함될 수 있다.
 
-```bash
-git status
-git branch
-1. 오늘 한 작업 요약
-Playlist, Track, PlaylistTrack 엔티티 설계
+플레이리스트 안에서 곡의 순서(trackOrder) 를 관리해야 한다.
 
-다대다 관계를 중간 엔티티로 분리
+같은 플레이리스트에 동일한 곡이 중복으로 들어가면 안 된다.
 
-플레이리스트 내 곡 순서를 위한 trackOrder 필드 추가
+관계만 보면 Playlist ↔ Track 은 다대다(ManyToMany) 관계처럼 보인다.
 
-동일 플레이리스트 내 동일 트랙 중복 방지 제약 설정
+2. ManyToMany를 사용하지 않은 이유
 
-작업 내용을 정리해두지 않으면
-나중에 “왜 이렇게 설계했더라?”라는 고민을 다시 하게 될 것 같아 TIL로 기록.
+JPA에서 @ManyToMany 는 다음과 같은 한계를 가진다.
 
-2. 요구사항 정리
-플레이리스트 도메인의 요구사항은 다음과 같았다.
+❌ 실무에서의 문제점
 
-하나의 플레이리스트에는 여러 곡이 들어간다.
+중간 테이블에 추가 컬럼을 둘 수 없음
 
-하나의 곡도 여러 플레이리스트에 포함될 수 있다.
+순서, 등록일, 메타 정보 관리 불가능
 
-플레이리스트 안에서 곡의 순서가 중요하다.
+비즈니스 로직이 커질수록 확장 불가
 
-같은 플레이리스트에 같은 곡을 중복 추가할 수 없다.
+중간 테이블을 직접 제어하기 어려움
 
-겉으로 보면 N:N 관계지만
-순서(trackOrder) 라는 추가 정보가 필요한 순간
-단순 @ManyToMany는 부적합하다고 판단했다.
+이번 설계에서는
+곡의 순서(trackOrder) 라는 명확한 추가 정보가 필요했기 때문에
+@ManyToMany 는 적합하지 않았다.
 
-3. @ManyToMany 설계의 한계
-처음 떠올릴 수 있는 설계는 다음과 같다.
+3. 해결 방법: 연결 엔티티(중간 테이블) 도입
 
-java
-코드 복사
-@ManyToMany
-@JoinTable(
-    name = "PLAYLIST_TRACK",
-    joinColumns = @JoinColumn(name = "playlist_id"),
-    inverseJoinColumns = @JoinColumn(name = "track_id")
-)
-private List<Track> tracks;
-하지만 이 방식에는 분명한 문제점이 있다.
+다대다 관계를 두 개의 일대다 / 다대일 관계로 풀어냈다.
 
-관계 테이블에 컬럼을 추가할 수 없음
+설계 구조
+Playlist 1 ─── N PlaylistTrack N ─── 1 Track
 
-관계 자체를 도메인으로 다루기 어려움
 
-실무에서 확장성이 매우 떨어짐
+PlaylistTrack 이 연결 엔티티
 
-👉 결론: 중간 엔티티를 두고 풀자
+중간 테이블이지만, JPA에서는 독립적인 엔티티로 관리
 
-4. 중간 엔티티로 N:N 관계 풀기
-설계 구조는 다음과 같다.
-
-Playlist 1 : N PlaylistTrack
-
-Track 1 : N PlaylistTrack
-
-이 시점에서 엔티티 구조를 수정했고,
-변경 사항을 잃어버리지 않기 위해 수시로 Git 상태를 확인했다.
-
-bash
-코드 복사
-git status
-5. 엔티티 코드 정리
-5.1 Track 엔티티
-java
-코드 복사
-@Entity
-@Table(name = "TRACK")
-public class Track {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(nullable = false, length = 200)
-    private String title;
-
-    @Column(nullable = false, length = 100)
-    private String artist;
-
-    @Column(length = 100)
-    private String album;
-
-    private Integer durationSec;
-
-    protected Track() {}
-
-    public Track(String title, String artist, String album, Integer durationSec) {
-        this.title = title;
-        this.artist = artist;
-        this.album = album;
-        this.durationSec = durationSec;
-    }
-}
-Track 엔티티 작성 후 중간 저장.
-
-bash
-코드 복사
-git add Track.java
-git commit -m "feat: Track 엔티티 기본 구조 추가"
-5.2 Playlist 엔티티
-java
-코드 복사
-@Entity
-@Table(name = "PLAYLIST")
-public class Playlist {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "user_id")
-    private User user;
-
-    @Column(nullable = false, length = 100)
-    private String title;
-
-    @Column(columnDefinition = "TEXT")
-    private String description;
-
-    @Column(nullable = false)
-    private boolean isPublic = true;
-
-    @OneToMany(mappedBy = "playlist", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<PlaylistTrack> playlistTracks = new ArrayList<>();
-
-    protected Playlist() {}
-
-    public Playlist(User user, String title, String description, boolean isPublic) {
-        this.user = user;
-        this.title = title;
-        this.description = description;
-        this.isPublic = isPublic;
-    }
-
-    public void addPlaylistTrack(PlaylistTrack playlistTrack) {
-        playlistTracks.add(playlistTrack);
-        playlistTrack.setPlaylist(this);
-    }
-}
-양방향 연관관계에 대비해
-편의 메서드를 함께 정의했다.
-
-bash
-코드 복사
-git add Playlist.java
-git commit -m "feat: Playlist 엔티티 및 연관관계 편의 메서드 추가"
-5.3 PlaylistTrack 엔티티 (핵심)
-java
-코드 복사
+4. PlaylistTrack 엔티티 설계
 @Entity
 @Table(
     name = "PLAYLIST_TRACK",
@@ -187,49 +71,84 @@ public class PlaylistTrack {
 
     @Column(nullable = false)
     private Integer trackOrder;
-
-    protected PlaylistTrack() {}
-
-    public PlaylistTrack(Playlist playlist, Track track, Integer trackOrder) {
-        this.playlist = playlist;
-        this.track = track;
-        this.trackOrder = trackOrder;
-    }
-
-    public void setPlaylist(Playlist playlist) {
-        this.playlist = playlist;
-    }
 }
-관계에 의미(trackOrder)가 생김
 
-DB 레벨에서 중복 방지 가능
+핵심 포인트
 
-bash
-코드 복사
-git add PlaylistTrack.java
-git commit -m "feat: PlaylistTrack 중간 엔티티 및 순서 관리 필드 추가"
-6. 설계 포인트 정리
-6.1 중간 엔티티를 사용한 이유
-관계에 데이터가 필요함
+Playlist 와 Track 을 각각 @ManyToOne 으로 연결
 
-확장 가능성 확보
+trackOrder 로 플레이리스트 내 곡 순서 관리
 
-실무에서 흔히 사용하는 패턴
+(playlist_id + track_id) 조합에 유니크 제약조건 추가
 
-6.2 유니크 제약으로 중복 방지
-java
-코드 복사
-uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"playlist_id", "track_id"})
+동일 플레이리스트에 같은 곡 중복 방지
+
+5. Playlist 엔티티 설계 (읽기 전용 연관관계)
+@OneToMany(mappedBy = "playlist", cascade = CascadeType.ALL, orphanRemoval = true)
+private List<PlaylistTrack> playlistTracks = new ArrayList<>();
+
+설계 의도
+
+연관관계의 주인은 PlaylistTrack
+
+Playlist 쪽에서는 조회용(읽기 전용) 으로만 사용
+
+실제 추가/삭제/순서 변경은 PlaylistTrack 기준으로 처리
+
+6. Track 엔티티는 단순 엔티티로 유지
+@Entity
+@Table(name = "TRACK")
+public class Track {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, length = 200)
+    private String title;
+
+    @Column(nullable = false, length = 100)
+    private String artist;
+
+    private Integer durationSec;
 }
-애플리케이션 로직 + DB 제약의 이중 방어.
 
-7. 회고
-JPA에서 ManyToMany는 학습용,
-실무에서는 거의 항상 중간 엔티티로 푼다.
 
-“관계도 하나의 도메인이다”라는 관점을 체감했다.
+Track 자체는 순서나 소속 개념을 알 필요가 없음
 
-엔티티 설계 단계에서 시간을 쓰는 것이
-이후 API/쿼리 설계를 훨씬 편하게 만들어준다.
+관계 책임은 연결 엔티티가 담당
 
+7. 이 설계의 장점
+✅ 확장성
+
+추후 addedAt, addedBy, playCount 등 컬럼 추가 가능
+
+✅ 명확한 책임 분리
+
+Playlist: 플레이리스트 자체의 정보
+
+Track: 곡 자체의 정보
+
+PlaylistTrack: “이 플레이리스트에 이 곡이 어떤 순서로 들어있는가”
+
+✅ 실무 친화적 설계
+
+정렬, 삭제, 순서 변경 로직 구현이 쉬움
+
+Repository 분리 (PlaylistTrackRepository) 가능
+
+✅ JPA 권장 방식
+
+공식적으로 권장되는 다대다 해소 패턴
+
+복잡한 비즈니스 로직에 대응 가능
+
+8. 정리
+
+다대다 관계에서 비즈니스 속성이 하나라도 필요하다면
+@ManyToMany 대신 연결 엔티티를 사용하는 것이 정석이다.
+
+이번 Playlist ↔ Track 설계에서는
+곡의 순서 관리라는 요구사항 때문에
+PlaylistTrack 이라는 연결 엔티티를 도입했고,
+그 결과 확장성과 유지보수성이 높은 구조를 만들 수 있었다.
